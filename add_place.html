@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Добавить новое место — Сириус.Путеводитель</title>
+    <link href="https://fonts.googleapis.com/css?family=Montserrat:400,700&display=swap" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <style>
+        body {
+            font-family: 'Montserrat', Arial, sans-serif;
+            background: linear-gradient(120deg, #6A3EFF 0%, #30CFFF 100%);
+            min-height: 100vh;
+        }
+        .sirius-header {
+            color: #fff;
+            text-shadow: 0 2px 16px rgba(106,62,255,0.15);
+            letter-spacing: 2px;
+            font-weight: 700;
+            margin-top: 32px;
+        }
+        .form-card {
+            background: #fff;
+            border-radius: 18px;
+            box-shadow: 0 8px 32px rgba(106,62,255,0.11);
+            max-width: 600px;
+            margin: 40px auto;
+            padding: 32px 28px 22px;
+        }
+        .btn-sirius {
+            background: linear-gradient(90deg,#6A3EFF 50%,#30CFFF 100%);
+            color: #fff;
+            border: none;
+            font-weight: 600;
+            box-shadow: 0 2px 8px rgba(106,62,255,0.12);
+            transition: background 0.15s;
+        }
+        .btn-sirius:hover {
+            background: linear-gradient(90deg,#30CFFF 30%,#6A3EFF 100%);
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1 class="sirius-header text-center mb-4">Добавить новое место</h1>
+    <div class="form-card">
+        <form enctype="multipart/form-data">
+            <div class="mb-3">
+                <label class="form-label">Название</label>
+                <input type="text" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Адрес</label>
+                <input type="text" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Выберите место на карте (ФТ "Сириус")</label>
+                <div id="map" style="height: 280px; border-radius: 12px; margin-bottom: 8px;"></div>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Категория</label>
+                <select class="form-select" required>
+                    <option>Музей</option>
+                    <option>Парк</option>
+                    <option>Кафе</option>
+                    <option>Арена</option>
+                    <option>Другое</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Описание</label>
+                <textarea class="form-control" rows="3" required></textarea>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Фото (можно выбрать несколько)</label>
+                <input type="file" class="form-control" name="photos" accept="image/*" multiple>
+            </div>
+            <button type="submit" class="btn btn-sirius">Добавить</button>
+            <a href="index.html" class="btn btn-outline-secondary ms-2">Назад</a>
+        </form>
+    </div>
+</div>
+
+<script src="https://api-maps.yandex.ru/2.1/?lang=ru_RU" type="text/javascript"></script>
+
+
+<script>
+ymaps.ready(function() {
+    // Примерные границы ФТ "Сириус"
+    var siriusBounds = [
+        [43.400, 39.900], // Юго-запад
+        [43.510, 40.040]  // Северо-восток
+    ];
+
+    // Центр карты
+    var center = [43.445, 39.963];
+
+    var map = new ymaps.Map('map', {
+        center: center,
+        zoom: 14,
+        controls: ['zoomControl']
+    });
+
+    // Ограничиваем перемещение по карте
+    map.setBounds(siriusBounds, {checkZoomRange: true, zoomMargin: 9});
+    map.behaviors.enable('drag');
+    map.options.set('restrictMapArea', siriusBounds);
+
+    var placemark;
+
+        map.events.add('click', function (e) {
+        var coords = e.get('coords');
+
+        if (placemark) {
+            placemark.geometry.setCoordinates(coords);
+        } else {
+            placemark = new ymaps.Placemark(coords, {}, {preset: 'islands#violetDotIcon'});
+            map.geoObjects.add(placemark);
+        }
+
+        let addressInput = document.querySelectorAll('input[type="text"].form-control')[1];
+        addressInput.value = `Координаты: ${coords[0].toFixed(5)}, ${coords[1].toFixed(5)}`;
+
+        ymaps.geocode(coords).then(function (res) {
+            var firstGeoObject = res.geoObjects.get(0);
+            if (firstGeoObject) {
+                addressInput.value = firstGeoObject.getAddressLine();
+            }
+        });
+    });
+});
+</script>
+
+
+<script>
+document.querySelector('form').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    const form = e.target;
+    const name = form.querySelector('input[type="text"]').value;
+    const address = form.querySelectorAll('input[type="text"]')[1].value;
+    const category = form.querySelector('select').value;
+    const description = form.querySelector('textarea').value;
+    const files = form.querySelector('input[type="file"]').files;
+
+    // Читаем фото как base64 (только первое для простоты)
+    if (files.length > 0) {
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+            savePlace(evt.target.result);
+        };
+        reader.readAsDataURL(files[0]);
+    } else {
+        savePlace();
+    }
+
+    function savePlace(photoData) {
+        const newPlace = {
+            name,
+            address,
+            category,
+            description,
+            photo: photoData || null
+        };
+        let places = JSON.parse(localStorage.getItem('sirius_places') || '[]');
+        places.push(newPlace);
+        localStorage.setItem('sirius_places', JSON.stringify(places));
+        window.location.href = 'index.html';
+    }
+});
+</script>
+
+
+</body>
+</html>
